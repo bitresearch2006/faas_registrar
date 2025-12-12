@@ -38,6 +38,9 @@ fi
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"; flock -u 9' EXIT
 
+# -----------------------------------------------------------------------------
+# PYTHON SCRIPT START
+# -----------------------------------------------------------------------------
 python3 - "$MAPPING" "$OUT_DIR" <<'PY' > "$TMP_DIR/regen.stdout" 2> "$TMP_DIR/regen.stderr"
 import json,sys,os,re,html
 mapping_file=sys.argv[1]
@@ -55,11 +58,19 @@ def safe_name(u):
 for user, port in users.items():
     user_str=str(user)
     fname = os.path.join(out_dir, safe_name(user_str) + ".conf")
-    # Build an nginx location for this user that proxies /username/... -> 127.0.0.1:port$request_uri
+    
+    # --------------------------------------------------------------------------
+    # UPDATED LOGIC:
+    # 1. location /user/ (with trailing slash) matches the folder prefix
+    # 2. proxy_pass .../ (with trailing slash) strips that prefix
+    # 3. proxy_redirect fixes backend redirects to stay within /user/
+    # --------------------------------------------------------------------------
     conf = f"""# Auto-generated for user: {user_str}
-# Proxy /{user_str} and subpaths to local port {port}
-location ^~ /{user_str} {{
-    proxy_pass http://127.0.0.1:{port}$request_uri;
+# Proxy /{user_str}/ to local port {port}
+location /{user_str}/ {{
+    proxy_pass http://127.0.0.1:{port}/;
+    proxy_redirect / /{user_str}/;
+
     proxy_set_header Host $host;
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -78,9 +89,11 @@ location ^~ /{user_str} {{
     # rename will be done by shell after this script finishes
     print(fname + ".tmp")
 PY
+# -----------------------------------------------------------------------------
+# PYTHON SCRIPT END
+# -----------------------------------------------------------------------------
 
 # Move generated tmp files into final names (atomic-ish)
-# python printed tmp paths, one per user
 while IFS= read -r tmpf; do
   final="${tmpf%'.tmp'}"
   mv -f "$tmpf" "$final"
