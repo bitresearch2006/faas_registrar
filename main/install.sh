@@ -42,6 +42,12 @@ TOKEN_FILE="$TOKEN_DIR/tunnel_tokens.json"
 USER_PORTS="$TOKEN_DIR/user_ports.json"
 LOGFILE="/var/log/tunnel_signer.log"
 
+# --- set up python virtualenv for the signing service ---
+VENV_DIR="/opt/tunnel_signer/venv"
+PY_BIN="$VENV_DIR/bin/python3"
+PIP_BIN="$VENV_DIR/bin/pip3"
+
+
 echo "=== Tunnel signer installer (updated) ==="
 
 if (( EUID != 0 )); then
@@ -60,11 +66,26 @@ echo "--> Installing OS packages (python3, pip, jq, openssl, nginx)..."
 apt-get update -y
 apt-get install -y python3 python3-pip jq openssl nginx
 
-# ensure Flask available
-if ! python3 -c "import flask" >/dev/null 2>&1; then
-  pip3 install --upgrade pip
-  pip3 install flask
+# create venv if missing
+if [ ! -x "$PY_BIN" ]; then
+  echo "--> Creating python virtualenv at $VENV_DIR"
+  mkdir -p "$(dirname "$VENV_DIR")"
+  python3 -m venv "$VENV_DIR"
+  chown -R root:root "$VENV_DIR"
+  chmod -R 750 "$VENV_DIR"
 fi
+
+# upgrade pip inside venv and install runtime deps
+"$PIP_BIN" install --upgrade pip setuptools wheel
+"$PIP_BIN" install --no-cache-dir flask
+
+# sanity check
+if ! "$PY_BIN" -c "import flask" >/dev/null 2>&1; then
+  echo "ERROR: flask not available inside venv $VENV_DIR" >&2
+  exit 1
+fi
+echo "   Flask installed in venv: $VENV_DIR"
+# --- end venv setup ---
 
 # Run CA creation script (provided by user)
 echo "--> Running vm_create_ca.sh to create CA and configure sshd..."

@@ -5,9 +5,11 @@ After=network.target
 [Service]
 User=root
 Group=root
-ExecStart=/usr/bin/env python3 /usr/local/bin/sign_service.py
+WorkingDirectory=/usr/local/bin
+ExecStart=/opt/tunnel_signer/venv/bin/python3 /usr/local/bin/sign_service.py
 Restart=on-failure
 RestartSec=5s
+Environment=PATH=/opt/tunnel_signer/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
 
 [Install]
 WantedBy=multi-user.target
