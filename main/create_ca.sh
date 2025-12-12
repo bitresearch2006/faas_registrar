@@ -20,12 +20,29 @@ grep -q "^AllowTcpForwarding" "$SSHD_CONF" || echo "AllowTcpForwarding yes" >> "
 # keep GatewayPorts no (safer) unless you want remote ports public
 grep -q "^GatewayPorts" "$SSHD_CONF" || echo "GatewayPorts no" >> "$SSHD_CONF"
 
-# Restart sshd
-if command -v systemctl >/dev/null 2>&1; then
-  systemctl restart sshd || systemctl restart ssh
+# Restart or start sshd safely
+if [ ! -f "$SSHD_CONF" ]; then
+  echo "WARNING: $SSHD_CONF not found. openssh-server may not be installed."
+  echo "Install with: sudo apt install -y openssh-server"
 else
-  service ssh restart
+  echo "Updating sshd config completed."
 fi
+
+# If systemd exists (Ubuntu proper)
+if command -v systemctl >/dev/null 2>&1 && ps -p 1 -o comm= | grep -q systemd; then
+  echo "Restarting sshd using systemctl..."
+  systemctl restart sshd 2>/dev/null || systemctl restart ssh 2>/dev/null || \
+    echo "systemctl restart failed — please check sshd status."
+else
+  # Non-systemd (WSL or minimal environments)
+  if [ -x /usr/sbin/sshd ]; then
+    echo "systemd not available — starting sshd manually..."
+    /usr/sbin/sshd -t && /usr/sbin/sshd || echo "Failed to start sshd manually."
+  else
+    echo "ERROR: sshd not found. Install openssh-server."
+  fi
+fi
+
 
 echo "CA created: $CA_DIR/ssh_ca (private) and $CA_DIR/ssh_ca.pub (public)."
 echo "TrustedUserCAKeys set to: $TRUSTED_USER_CA"

@@ -100,6 +100,12 @@ fi
 echo "   Flask installed in venv: $VENV_DIR"
 # --- end venv setup ---
 
+# Ensure openssh-server exists (create_ca.sh needs sshd + config)
+if [ ! -f /etc/ssh/sshd_config ] || [ ! -x /usr/sbin/sshd ]; then
+  echo "[INFO] openssh-server not found — installing..."
+  apt-get install -y openssh-server
+fi
+
 # Run CA creation script (provided by user)
 echo "--> Running vm_create_ca.sh to create CA and configure sshd..."
 chmod +x "$F_CA_CREATE"
