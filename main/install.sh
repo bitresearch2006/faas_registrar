@@ -199,6 +199,158 @@ else
   exit 3
 fi
 
+#
+# ---------------------- Verification stage ----------------------
+#
+# This block performs post-install verification checks and prints a summary.
+#
+echo "--> Running post-install verification checks..."
+
+VER_FAILED=0
+VER_TOTAL=0
+VER_PASSED=0
+
+# helper: record check result
+record_ok() { VER_TOTAL=$((VER_TOTAL+1)); VER_PASSED=$((VER_PASSED+1)); printf " [ OK ] %s\n" "$1"; }
+record_fail() { VER_TOTAL=$((VER_TOTAL+1)); VER_FAILED=$((VER_FAILED+1)); printf " [FAIL] %s\n" "$1"; }
+
+# check file exists and permissions (mode as octal string)
+check_file_mode() {
+  local path="$1"; local want_mode="$2"; local desc="$3"
+  if [ -f "$path" ]; then
+    # get actual mode (owner bits)
+    actual_mode=$(stat -c "%a" "$path" 2>/dev/null || echo "000")
+    if [ "$actual_mode" = "$want_mode" ]; then
+      record_ok "$desc: $path (mode $actual_mode)"
+    else
+      record_fail "$desc: $path exists but mode is $actual_mode (expected $want_mode)"
+    fi
+  else
+    record_fail "$desc: $path missing"
+  fi
+}
+
+# check systemd service active/enabled
+check_systemd_service() {
+  local svc="$1"
+  if systemctl is-enabled --quiet "$svc" && systemctl is-active --quiet "$svc"; then
+    record_ok "systemd: $svc enabled & active"
+  else
+    # gather some info
+    echo "   --- systemctl status $svc ---"
+    systemctl --no-pager status "$svc" || true
+    record_fail "systemd: $svc not enabled/active"
+  fi
+}
+
+# check that nginx test is OK (we already tested earlier, re-run to be safe)
+if nginx -t >/dev/null 2>&1; then
+  record_ok "nginx config test"
+else
+  nginx -t || true
+  record_fail "nginx config test failed"
+fi
+
+# check sign service systemd
+check_systemd_service "sign_service.service"
+
+# check that sign_service responds on the local /sign-cert path (expect 200 or 405 or 404 depending on method)
+check_endpoint() {
+  local url="http://127.0.0.1/sign-cert"
+  # prefer curl, fall back to wget
+  http_code=""
+  if command -v curl >/dev/null 2>&1; then
+    http_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 "$url" || echo "")
+  elif command -v wget >/dev/null 2>&1; then
+    http_code=$(wget -qO- --timeout=3 --server-response "$url" 2>&1 | awk '/HTTP/{print $2; exit}' || echo "")
+  else
+    http_code=""
+  fi
+
+  if [ -z "$http_code" ]; then
+    record_fail "sign_service endpoint: no response from $url"
+  else
+    case "$http_code" in
+      200|201|204|405|404)
+        record_ok "sign_service endpoint: $url responded with HTTP $http_code"
+        ;;
+      *)
+        record_fail "sign_service endpoint: $url responded with HTTP $http_code"
+        ;;
+    esac
+  fi
+}
+check_endpoint
+
+# verify token file JSON parseable and permissions
+if command -v jq >/dev/null 2>&1; then
+  if [ -f "$TOKEN_FILE" ]; then
+    if jq empty "$TOKEN_FILE" >/dev/null 2>&1; then
+      record_ok "token JSON parseable: $TOKEN_FILE"
+    else
+      record_fail "token JSON invalid: $TOKEN_FILE"
+    fi
+  else
+    record_fail "token file missing: $TOKEN_FILE"
+  fi
+else
+  record_fail "jq not available to validate $TOKEN_FILE"
+fi
+
+# quick check user_ports.json parseable
+if [ -f "$USER_PORTS" ]; then
+  if jq empty "$USER_PORTS" >/dev/null 2>&1; then
+    record_ok "user_ports JSON parseable: $USER_PORTS"
+  else
+    record_fail "user_ports JSON invalid: $USER_PORTS"
+  fi
+else
+  record_fail "user_ports file missing: $USER_PORTS"
+fi
+
+# check trusted CA
+if [ -f "$TRUSTED_CA" ]; then
+  record_ok "trusted CA present: $TRUSTED_CA"
+else
+  record_fail "trusted CA missing: $TRUSTED_CA"
+fi
+
+# check presence and mode of critical installed files
+check_file_mode "$SERVICE_PY" "700" "sign_service script"
+check_file_mode "$SERVICE_UNIT" "644" "systemd unit"
+check_file_mode "$ADD_TOKEN_DST" "700" "add_token script"
+check_file_mode "$REVOKE_TOKEN_DST" "700" "revoke_token script"
+check_file_mode "$ALLOC_PORT_DST" "700" "alloc_user_port script"
+check_file_mode "$REGEN_NGINX_DST" "700" "regen_nginx_routes script"
+check_file_mode "$REMOVE_PORT_DST" "700" "remove_user_port script"
+check_file_mode "$LOGFILE" "600" "log file"
+
+# check nginx users dir exists and is readable
+if [ -d "$NGINX_USERS_DIR" ]; then
+  record_ok "nginx users dir exists: $NGINX_USERS_DIR"
+else
+  record_fail "nginx users dir missing: $NGINX_USERS_DIR"
+fi
+
+# final summary
+echo
+echo "=== Verification summary ==="
+echo "  Total checks: $VER_TOTAL"
+echo "  Passed:       $VER_PASSED"
+echo "  Failed:       $VER_FAILED"
+echo
+
+if [ "$VER_FAILED" -gt 0 ]; then
+  echo "ERROR: some verification checks failed. Inspect the output above and fix the issues before relying on the service."
+  # Non-zero exit to indicate failure for automation
+  exit 4
+else
+  echo "All verification checks passed."
+fi
+
+#
+# ---------------------- End verification ----------------------
+#
 echo "=== Installation finished ==="
 echo "Token store: $TOKEN_FILE"
 echo "User->port map: $USER_PORTS"
