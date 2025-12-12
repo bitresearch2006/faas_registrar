@@ -5,8 +5,14 @@ CA_DIR=/etc/ssh/ca
 mkdir -p "$CA_DIR"
 chmod 700 "$CA_DIR"
 
-# Create CA keypair (ed25519)
-ssh-keygen -t ed25519 -f "$CA_DIR/ssh_ca" -C "vm-ssh-ca" -N ""
+# Create CA keypair (ed25519) only if missing
+if [ ! -f "$CA_DIR/ssh_ca" ]; then
+  echo "Generating new CA key..."
+  ssh-keygen -t ed25519 -f "$CA_DIR/ssh_ca" -C "vm-ssh-ca" -N ""
+else
+  echo "CA key already exists at $CA_DIR/ssh_ca — skipping generation."
+fi
+
 
 # TrustedUserCAKeys file location
 TRUSTED_USER_CA="/etc/ssh/trusted_user_ca_keys.pem"
