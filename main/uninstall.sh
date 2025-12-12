@@ -1,84 +1,69 @@
 #!/usr/bin/env bash
+# uninstall.sh
+# Usage: sudo ./uninstall.sh
 set -euo pipefail
 
-echo "==============================================="
-echo " Tunnel Signer Uninstaller"
-echo "==============================================="
-
-# Installed paths from setup_tunnel_signer.sh
+SERVICE="sign_service.service"
 SERVICE_UNIT="/etc/systemd/system/sign_service.service"
 SERVICE_PY="/usr/local/bin/sign_service.py"
-
-ADD_TOKEN="/usr/local/sbin/add_token.sh"
-REVOKE_TOKEN="/usr/local/sbin/revoke_token.sh"
-
-TOKEN_DIR="/etc/tunnel"
-TOKEN_FILE="/etc/tunnel/tunnel_tokens.json"
-
+ADD="/usr/local/sbin/add_token.sh"
+REVOKE="/usr/local/sbin/revoke_token.sh"
+ALLOC="/usr/local/sbin/alloc_user_port.sh"
+REGEN="/usr/local/bin/regen_nginx_routes.sh"
+REMOVE="/usr/local/sbin/remove_user_port.sh"
 NGINX_SNIPPET="/etc/nginx/conf.d/tunnel_signer.conf"
-
+NGINX_USERS_DIR="/etc/nginx/conf.d/users"
+TOKEN_DIR="/etc/tunnel"
+LOG="/var/log/tunnel_signer.log"
 CA_DIR="/etc/ssh/ca"
-CA_KEY="$CA_DIR/ssh_ca"
-CA_PUB="$CA_DIR/ssh_ca.pub"
-TRUSTED_CA="/etc/ssh/trusted_user_ca_keys.pem"
+TRUSTED="/etc/ssh/trusted_user_ca_keys.pem"
 
-LOGFILE="/var/log/tunnel_signer.log"
+echo "This will stop and remove tunnel signer components installed by setup."
+read -p "Proceed? (type YES): " CONF
+if [ "$CONF" != "YES" ]; then echo "Aborted"; exit 1; fi
 
-if (( EUID != 0 )); then
-    echo "ERROR: This script must be run as root (sudo)."
-    exit 1
-fi
+echo "--> Stopping & disabling service"
+systemctl stop "$SERVICE" 2>/dev/null || true
+systemctl disable "$SERVICE" 2>/dev/null || true
 
-echo "--> Stopping signing service (if exists)..."
-systemctl stop sign_service.service 2>/dev/null || true
-systemctl disable sign_service.service 2>/dev/null || true
-
-echo "--> Removing systemd unit..."
+echo "--> Removing systemd unit"
 rm -f "$SERVICE_UNIT"
 systemctl daemon-reload
 
-echo "--> Removing signing service file..."
+echo "--> Removing service binary"
 rm -f "$SERVICE_PY"
 
-echo "--> Removing admin helper scripts..."
-rm -f "$ADD_TOKEN" "$REVOKE_TOKEN"
+echo "--> Removing admin helpers"
+rm -f "$ADD" "$REVOKE" "$ALLOC" "$REGEN" "$REMOVE"
 
-echo "--> Removing token store..."
-rm -f "$TOKEN_FILE"
-rm -d "$TOKEN_DIR" 2>/dev/null || true
-
-echo "--> Removing nginx snippet..."
+echo "--> Removing nginx snippet and per-user files"
 rm -f "$NGINX_SNIPPET"
+if [ -d "$NGINX_USERS_DIR" ]; then rm -rf "$NGINX_USERS_DIR"; fi
 
-echo "--> Testing nginx..."
+echo "--> Removing token & mapping store"
+rm -rf "$TOKEN_DIR"
+
+echo "--> Removing log file"
+rm -f "$LOG"
+
+echo "--> nginx test/reload"
 if nginx -t >/dev/null 2>&1; then
-    echo "   Reloading nginx..."
-    systemctl reload nginx
+  systemctl reload nginx
+  echo "nginx reloaded"
 else
-    echo "WARNING: nginx test failed — your nginx config may need attention"
+  echo "nginx test failed; check config"
 fi
 
-echo "--> Removing log file..."
-rm -f "$LOGFILE"
-
-# OPTIONAL: Remove CA (DISABLED BY DEFAULT — uncomment if you want)
-REMOVE_CA=false   # <-- CHANGE TO true IF YOU WANT TO DELETE CA
-
-if [ "$REMOVE_CA" = true ]; then
-    echo "--> Removing CA files (You enabled REMOVE_CA=true)"
-    rm -f "$CA_KEY" "$CA_PUB"
-    rm -d "$CA_DIR" 2>/dev/null || true
-    rm -f "$TRUSTED_CA"
-    echo "   NOTE: You must manually clean sshd_config if CA lines remain."
-else
-    echo "--> CA removal skipped (REMOVE_CA=false)."
-    echo "    CA files preserved under: $CA_DIR"
-fi
-
-echo "--> Uninstall complete!"
-echo "==============================================="
-echo "What remains:"
-echo "- CA directory (unless REMOVE_CA=true)"
-echo "- Nginx & SSH original configs untouched"
 echo
-echo "All tunnel signer components have been removed."
+echo "CA keys are preserved by default for safety."
+read -p "Remove CA files under $CA_DIR and trusted file $TRUSTED? (type DELETE to remove): " DELCA
+if [ "$DELCA" = "DELETE" ]; then
+  rm -rf "$CA_DIR"
+  rm -f "$TRUSTED"
+  echo "CA files removed. You must also remove TrustedUserCAKeys from sshd_config manually if present."
+  echo "Restart sshd after editing sshd_config: sudo systemctl restart sshd"
+else
+  echo "CA files preserved."
+fi
+
+echo "Uninstall complete."

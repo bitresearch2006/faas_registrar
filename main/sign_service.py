@@ -45,6 +45,23 @@ def authorize_token(bearer):
         return None
     return entry
 
+@app.route("/whoami", methods=["GET"])
+def whoami():
+    # require Authorization: Bearer <token>
+    auth = request.headers.get("Authorization", "")
+    if not auth.startswith("Bearer "):
+        logging.warning("Missing bearer token on /whoami from %s", request.remote_addr)
+        abort(401)
+    token = auth.split(None, 1)[1].strip()
+    entry = authorize_token(token)
+    if not entry:
+        logging.warning("Unauthorized /whoami attempt from %s", request.remote_addr)
+        abort(403)
+    # return the name and allocated port for this token (if present)
+    name = entry.get("name")
+    port = entry.get("port")
+    return jsonify({"name": name, "port": port}), 200
+
 @app.route("/sign-cert", methods=["POST"])
 def sign_cert():
     # Auth header
@@ -113,7 +130,7 @@ def sign_cert():
     except Exception as e:
         logging.exception("Unexpected error")
         return jsonify({"error":"internal error"}), 500
-
+    
 if __name__ == "__main__":
     # bind to localhost only; run via systemd in production
     app.run(host="127.0.0.1", port=5001)
