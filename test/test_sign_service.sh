@@ -18,7 +18,8 @@ TEST_KEY_PRIVATE="$TMP_DIR/test_id_ed25519"
 TEST_KEY_PUBLIC="$TEST_KEY_PRIVATE.pub"
 CERT_OUT="$TMP_DIR/test_cert.pub"
 TEST_TOKEN="INTEGRATION_TEST_TOKEN_$(date +%s)"
-TEST_PRINCIPAL="testuser"
+# Auto-detect principal as the current Linux username
+TEST_PRINCIPAL="$(id -un)"
 TTL_OK=300
 TTL_TOO_LARGE=999999999
 

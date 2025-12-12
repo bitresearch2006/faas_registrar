@@ -27,7 +27,8 @@ CERT_OUT="$TMPDIR/test_cert.pub"
 BACKUP_TOKEN="${TOKEN_FILE}.bak.$(date +%s)"
 USE_ADD_HELPER=false
 CREATED_TOKEN=""
-TEST_PRINCIPAL="bitresearch"
+# Auto-detect principal as the current Linux username
+TEST_PRINCIPAL="$(id -un)"
 TTL_OK=300
 TTL_TOO_LARGE=999999999
 
@@ -126,7 +127,7 @@ if [ -x "$ADD_TOKEN_CMD" ]; then
   echo " - Using helper: $ADD_TOKEN_CMD"
   USE_ADD_HELPER=true
   # helper prints 'Created token: <token>' - capture that
-  OUT="$("$ADD_TOKEN_CMD" "e2e-test" "automated verification" "$TTL_OK" 2>&1)"
+  OUT="$("$ADD_TOKEN_CMD" "e2e-test" "$TEST_PRINCIPAL" "$TTL_OK" 2>&1)"
   echo "$OUT"
   # extract hex-like token
   TOK="$(printf "%s" "$OUT" | sed -n 's/.*Created token:[[:space:]]*\([a-f0-9]\+\).*/\1/p' || true)"
