@@ -34,8 +34,11 @@ REVOKE_TOKEN_DST="/usr/local/sbin/revoke_token.sh"
 ALLOC_PORT_DST="/usr/local/sbin/alloc_user_port.sh"
 REGEN_NGINX_DST="/usr/local/bin/regen_nginx_routes.sh"
 REMOVE_PORT_DST="/usr/local/sbin/remove_user_port.sh"
-NGINX_SNIPPET="/etc/nginx/conf.d/tunnel_signer.conf"
 NGINX_USERS_DIR="/etc/nginx/conf.d/users"
+
+# install the provided site config into sites-available and enable it
+NGINX_SITE="/etc/nginx/sites-available/bitone.in"
+NGINX_SITE_ENABLED="/etc/nginx/sites-enabled/bitone.in"
 
 TOKEN_DIR="/etc/tunnel"
 TOKEN_FILE="$TOKEN_DIR/tunnel_tokens.json"
@@ -175,9 +178,10 @@ mkdir -p "$NGINX_USERS_DIR"
 chown root:root "$NGINX_USERS_DIR"
 chmod 750 "$NGINX_USERS_DIR"
 
-echo "--> Installing tunnel signer nginx snippet -> $NGINX_SNIPPET"
-cp "$F_TUNNEL_CONF" "$NGINX_SNIPPET"
-chmod 644 "$NGINX_SNIPPET"
+echo "--> Installing nginx site for bitone.in"
+cp "$F_TUNNEL_CONF" "$NGINX_SITE"
+ln -sf "$NGINX_SITE" "$NGINX_SITE_ENABLED"
+chmod 644 "$NGINX_SITE"
 # Log file
 touch "$LOGFILE"
 chmod 600 "$LOGFILE"

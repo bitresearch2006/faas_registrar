@@ -1,0 +1,77 @@
+# /etc/nginx/sites-available/bitone.in
+# Main site (static files) + Tunnel signer API endpoints
+
+# Redirect plain HTTP to HTTPS (Certbot may have created a similar block)
+server {
+    listen 80;
+    listen [::]:80;
+    server_name bitone.in www.bitone.in;
+
+    # Redirect all HTTP to HTTPS
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# HTTPS site (Certbot-managed)
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name bitone.in www.bitone.in;
+
+    root /var/www/bitone.in/html;
+    index index.html index.htm;
+
+    # Static website handling
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+    # Tunnel signer proxy endpoints (proxied to local Flask service)
+    # Ensure sign_service.py listens on 127.0.0.1:5001 (or update the proxy_pass accordingly)
+    location = /sign-cert {
+        proxy_pass http://127.0.0.1:5001/sign-cert;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Content-Length $content_length;
+        proxy_set_header Connection "";
+        proxy_buffering off;
+        proxy_read_timeout 60s;
+    }
+
+    location = /whoami {
+        proxy_pass http://127.0.0.1:5001/whoami;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Content-Length $content_length;
+        proxy_set_header Connection "";
+        proxy_buffering off;
+        proxy_read_timeout 60s;
+    }
+
+    # Optional local health endpoint
+    location = /tunnel/health {
+        access_log off;
+        add_header Content-Type text/plain;
+        return 200 'ok';
+    }
+
+    # Include per-user reverse-tunnel routes (generated)
+    include /etc/nginx/conf.d/users/*.conf;
+
+    # TLS (managed by Certbot)
+    ssl_certificate /etc/letsencrypt/live/bitone.in/fullchain.pem; # managed by Certbot
+    ssl_certificate_key /etc/letsencrypt/live/bitone.in/privkey.pem; # managed by Certbot
+    include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
+
+    access_log /var/log/nginx/bitone.in.access.log;
+    error_log  /var/log/nginx/bitone.in.error.log warn;
+    client_max_body_size 10M;
+}
