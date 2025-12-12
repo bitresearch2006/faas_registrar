@@ -1,0 +1,13 @@
+[Unit]
+Description=SSH cert signing service (local)
+After=network.target
+
+[Service]
+User=root
+Group=root
+ExecStart=/usr/bin/env python3 /usr/local/bin/sign_service.py
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
