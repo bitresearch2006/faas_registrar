@@ -208,7 +208,7 @@ echo "Admin helpers: $ADD_TOKEN_DST , $REVOKE_TOKEN_DST"
 echo "Port allocator: $ALLOC_PORT_DST"
 echo "Nginx regen: $REGEN_NGINX_DST"
 echo "Remove port helper: $REMOVE_PORT_DST"
-echo "Nginx snippet: $NGINX_SNIPPET"
+echo "Nginx snippet: $F_TUNNEL_CONF"
 echo "Log: $LOGFILE"
 echo
 echo "Next steps (example):"
