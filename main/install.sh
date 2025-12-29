@@ -55,7 +55,6 @@ LOGFILE="/var/log/tunnel_signer.log"
 VENV_DIR="/opt/tunnel_signer/venv"
 # Use python -m pip to avoid depending on pip3 binary name
 PY_BIN="$VENV_DIR/bin/python3"
-PIP_CMD="$PY_BIN -m pip"
 
 
 echo "=== Tunnel signer installer (updated) ==="
@@ -126,8 +125,8 @@ fi
 "$PY_BIN" -m ensurepip --upgrade || true
 
 # upgrade pip inside venv and install runtime deps
-"$PIP_CMD" install --upgrade pip setuptools wheel
-"$PIP_CMD" install --no-cache-dir flask
+"$PY_BIN" -m pip install --upgrade pip setuptools wheel
+"$PY_BIN" -m pip install --no-cache-dir flask
 
 # sanity check
 if ! "$PY_BIN" -c "import flask" >/dev/null 2>&1; then
