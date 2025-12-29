@@ -294,7 +294,7 @@ check_endpoint() {
   # prefer curl, fall back to wget
   http_code=""
   if command -v curl >/dev/null 2>&1; then
-    http_code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 "$url" || echo "")
+    http_code=$(curl -sfL -o /dev/null -w "%{http_code}" --max-time 3 "$url" || echo "")
   elif command -v wget >/dev/null 2>&1; then
     http_code=$(wget -qO- --timeout=3 --server-response "$url" 2>&1 | awk '/HTTP/{print $2; exit}' || echo "")
   else
