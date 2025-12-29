@@ -42,51 +42,43 @@ trap 'rm -rf "$TMP_DIR"; flock -u 9' EXIT
 # PYTHON SCRIPT START
 # -----------------------------------------------------------------------------
 python3 - "$MAPPING" "$OUT_DIR" <<'PY' > "$TMP_DIR/regen.stdout" 2> "$TMP_DIR/regen.stderr"
-import json,sys,os,re,html
+import json,sys,os,re
+
 mapping_file=sys.argv[1]
 out_dir=sys.argv[2]
 
-# load map
 with open(mapping_file,'r') as f:
     data=json.load(f)
 
 users=data.get("users",{})
-# normalize usernames to safe filenames (allow letters, numbers, -, _)
+
 def safe_name(u):
     return re.sub(r'[^A-Za-z0-9_\-]', '_', u)
 
 for user, port in users.items():
-    user_str=str(user)
-    fname = os.path.join(out_dir, safe_name(user_str) + ".conf")
-    
-    # --------------------------------------------------------------------------
-    # UPDATED LOGIC:
-    # 1. location /user/ (with trailing slash) matches the folder prefix
-    # 2. proxy_pass .../ (with trailing slash) strips that prefix
-    # 3. proxy_redirect fixes backend redirects to stay within /user/
-    # --------------------------------------------------------------------------
-    conf = f"""# Auto-generated for user: {user_str}
-# Proxy /{user_str}/ to local port {port}
-location /{user_str}/ {{
-    proxy_pass http://127.0.0.1:{port}/;
-    proxy_redirect / /{user_str}/;
+    user_str = str(user)
+    name = safe_name(user_str)
+    fname = os.path.join(out_dir, name + ".conf")
 
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_http_version 1.1;
-    proxy_set_header Connection "";
-    proxy_read_timeout 300;
-    proxy_buffering off;
+    conf = f"""# Auto-generated for user: {user_str}
+server {{
+    listen 443 ssl http2;
+    server_name {name}.bitone.in;
+
+    include /etc/nginx/snippets/bitone_ssl.conf;
+
+    location / {{
+        proxy_pass http://127.0.0.1:{port};
+        include /etc/nginx/snippets/bitone_proxy.conf;
+    }}
+
+    access_log /var/log/nginx/{name}.bitone.in.access.log;
+    error_log  /var/log/nginx/{name}.bitone.in.error.log warn;
 }}
 """
-    # Write to temp file (atomic replace later by shell)
     with open(fname + ".tmp", "w") as fh:
         fh.write(conf)
-    # set safe perms
     os.chmod(fname + ".tmp", 0o640)
-    # rename will be done by shell after this script finishes
     print(fname + ".tmp")
 PY
 # -----------------------------------------------------------------------------

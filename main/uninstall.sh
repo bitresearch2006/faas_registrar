@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # uninstall.sh
 # Usage: sudo ./uninstall.sh
+SCRIPT_PATH="$(readlink -f "$0" 2>/dev/null || echo "$0")"
+echo "Running uninstall script from: $SCRIPT_PATH"
 set -euo pipefail
 
 SERVICE="sign_service.service"
@@ -13,10 +15,13 @@ REGEN="/usr/local/bin/regen_nginx_routes.sh"
 REMOVE="/usr/local/sbin/remove_user_port.sh"
 NGINX_SNIPPET="/etc/nginx/conf.d/tunnel_signer.conf"
 NGINX_USERS_DIR="/etc/nginx/conf.d/users"
+SSL_SNIPPET="/etc/nginx/snippets/bitone_ssl.conf"
+PROXY_SNIPPET="/etc/nginx/snippets/bitone_proxy.conf"
 TOKEN_DIR="/etc/tunnel"
 LOG="/var/log/tunnel_signer.log"
 CA_DIR="/etc/ssh/ca"
 TRUSTED="/etc/ssh/trusted_user_ca_keys.pem"
+UNINSTALL_DST="/usr/local/sbin/uninstall_tunnel_signer.sh"
 
 echo "This will stop and remove tunnel signer components installed by setup."
 read -p "Proceed? (type YES): " CONF
@@ -39,6 +44,9 @@ rm -f "$ADD" "$REVOKE" "$ALLOC" "$REGEN" "$REMOVE"
 echo "--> Removing nginx snippet and per-user files"
 rm -f "$NGINX_SNIPPET"
 if [ -d "$NGINX_USERS_DIR" ]; then rm -rf "$NGINX_USERS_DIR"; fi
+
+echo "--> Removing nginx TLS/proxy snippets"
+rm -f "$SSL_SNIPPET" "$PROXY_SNIPPET"
 
 echo "--> Removing token & mapping store"
 rm -rf "$TOKEN_DIR"
@@ -66,4 +74,5 @@ else
   echo "CA files preserved."
 fi
 
+rm -f "$UNINSTALL_DST"
 echo "Uninstall complete."

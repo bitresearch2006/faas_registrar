@@ -22,6 +22,7 @@ F_TUNNEL_CONF="$SRC_DIR/bitone.in"                  # ngnix configuration
 F_ALLOC_PORT="$SRC_DIR/alloc_user_port.sh"
 F_REGEN_NGINX="$SRC_DIR/regen_nginx_routes.sh"
 F_REMOVE_PORT="$SRC_DIR/remove_user_port.sh"
+F_UNINSTALL="$SRC_DIR/uninstall.sh"
 
 CA_DIR="/etc/ssh/ca"
 TRUSTED_CA="/etc/ssh/trusted_user_ca_keys.pem"
@@ -34,7 +35,12 @@ REVOKE_TOKEN_DST="/usr/local/sbin/revoke_token.sh"
 ALLOC_PORT_DST="/usr/local/sbin/alloc_user_port.sh"
 REGEN_NGINX_DST="/usr/local/bin/regen_nginx_routes.sh"
 REMOVE_PORT_DST="/usr/local/sbin/remove_user_port.sh"
+UNINSTALL_DST="/usr/local/sbin/uninstall_tunnel_signer.sh"
 NGINX_USERS_DIR="/etc/nginx/conf.d/users"
+
+# centeralized TLS
+SSL_SNIPPET="/etc/nginx/snippets/bitone_ssl.conf"
+PROXY_SNIPPET="/etc/nginx/snippets/bitone_proxy.conf"
 
 # install the provided site config into sites-available and enable it
 NGINX_SITE="/etc/nginx/sites-available/bitone.in"
@@ -62,7 +68,7 @@ if (( EUID != 0 )); then
 fi
 
 # Confirm all source files exist
-for f in "$F_CA_CREATE" "$F_SIGN_SERVICE_PY" "$F_SIGN_SERVICE_UNIT" "$F_ADD_TOKEN" "$F_REVOKE_TOKEN" "$F_TUNNEL_CONF" "$F_ALLOC_PORT" "$F_REGEN_NGINX" "$F_REMOVE_PORT"; do
+for f in "$F_CA_CREATE" "$F_SIGN_SERVICE_PY" "$F_SIGN_SERVICE_UNIT" "$F_ADD_TOKEN" "$F_REVOKE_TOKEN" "$F_TUNNEL_CONF" "$F_ALLOC_PORT" "$F_REGEN_NGINX" "$F_REMOVE_PORT" "$F_UNINSTALL"; do
   if [ ! -f "$f" ]; then
     echo "ERROR: missing required file: $f" >&2
     exit 2
@@ -72,6 +78,31 @@ done
 echo "--> Installing OS packages (python3, pip, jq, openssl, nginx)..."
 apt-get update -y
 apt-get install -y python3 python3-pip jq openssl nginx
+
+# --- Creating nginx snippets for TLS and proxy config ---
+echo "--> Creating nginx snippets for centralized TLS and proxy settings"
+mkdir -p /etc/nginx/snippets
+
+cat > "$SSL_SNIPPET" <<'EOF'
+ssl_certificate /etc/letsencrypt/live/bitone.in/fullchain.pem;
+ssl_certificate_key /etc/letsencrypt/live/bitone.in/privkey.pem;
+include /etc/letsencrypt/options-ssl-nginx.conf;
+ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+EOF
+
+cat > "$PROXY_SNIPPET" <<'EOF'
+proxy_set_header Host $host;
+proxy_set_header X-Real-IP $remote_addr;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+proxy_http_version 1.1;
+proxy_set_header Connection "";
+proxy_read_timeout 300;
+proxy_buffering off;
+EOF
+
+chmod 644 "$SSL_SNIPPET" "$PROXY_SNIPPET"
+
 
 # ensure python venv support exists
 if ! python3 -c "import ensurepip" >/dev/null 2>&1 && ! python3 -c "import venv" >/dev/null 2>&1; then
@@ -173,9 +204,10 @@ cp "$F_REVOKE_TOKEN" "$REVOKE_TOKEN_DST"
 cp "$F_ALLOC_PORT" "$ALLOC_PORT_DST"
 cp "$F_REGEN_NGINX" "$REGEN_NGINX_DST"
 cp "$F_REMOVE_PORT" "$REMOVE_PORT_DST"
+cp "$F_UNINSTALL" "$UNINSTALL_DST"
 
-chmod 700 "$ADD_TOKEN_DST" "$REVOKE_TOKEN_DST" "$ALLOC_PORT_DST" "$REGEN_NGINX_DST" "$REMOVE_PORT_DST"
-chown root:root "$ADD_TOKEN_DST" "$REVOKE_TOKEN_DST" "$ALLOC_PORT_DST" "$REGEN_NGINX_DST" "$REMOVE_PORT_DST"
+chmod 700 "$ADD_TOKEN_DST" "$REVOKE_TOKEN_DST" "$ALLOC_PORT_DST" "$REGEN_NGINX_DST" "$REMOVE_PORT_DST" "$UNINSTALL_DST"
+chown root:root "$ADD_TOKEN_DST" "$REVOKE_TOKEN_DST" "$ALLOC_PORT_DST" "$REGEN_NGINX_DST" "$REMOVE_PORT_DST" "$UNINSTALL_DST"
 
 # create nginx per-user dir and snippet
 mkdir -p "$NGINX_USERS_DIR"
@@ -360,11 +392,11 @@ echo "Token store: $TOKEN_FILE"
 echo "User->port map: $USER_PORTS"
 echo "Per-user nginx dir: $NGINX_USERS_DIR"
 echo "Sign service: systemctl status sign_service.service"
-echo "Admin helpers: $ADD_TOKEN_DST , $REVOKE_TOKEN_DST"
+echo "Admin helpers: $ADD_TOKEN_DST , $REVOKE_TOKEN_DST , $UNINSTALL_DST"
 echo "Port allocator: $ALLOC_PORT_DST"
 echo "Nginx regen: $REGEN_NGINX_DST"
 echo "Remove port helper: $REMOVE_PORT_DST"
-echo "Nginx snippet: $F_TUNNEL_CONF"
+echo "Nginx site config: $F_TUNNEL_CONF"
 echo "Log: $LOGFILE"
 echo
 echo "Next steps (example):"

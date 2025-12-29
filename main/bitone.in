@@ -31,28 +31,12 @@ server {
     # Ensure sign_service.py listens on 127.0.0.1:5001 (or update the proxy_pass accordingly)
     location = /sign-cert {
         proxy_pass http://127.0.0.1:5001/sign-cert;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Content-Length $content_length;
-        proxy_set_header Connection "";
-        proxy_buffering off;
-        proxy_read_timeout 60s;
+        include /etc/nginx/snippets/bitone_proxy.conf;
     }
 
     location = /whoami {
         proxy_pass http://127.0.0.1:5001/whoami;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Content-Length $content_length;
-        proxy_set_header Connection "";
-        proxy_buffering off;
-        proxy_read_timeout 60s;
+        include /etc/nginx/snippets/bitone_proxy.conf;
     }
 
     # Optional local health endpoint
@@ -62,14 +46,10 @@ server {
         return 200 'ok';
     }
 
-    # Include per-user reverse-tunnel routes (generated)
-    include /etc/nginx/conf.d/users/*.conf;
 
-    # TLS (managed by Certbot)
-    ssl_certificate /etc/letsencrypt/live/bitone.in/fullchain.pem; # managed by Certbot
-    ssl_certificate_key /etc/letsencrypt/live/bitone.in/privkey.pem; # managed by Certbot
-    include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot
-    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot
+    # Centeralized TLS (managed by Certbot)
+    include /etc/nginx/snippets/bitone_ssl.conf;
+
 
     access_log /var/log/nginx/bitone.in.access.log;
     error_log  /var/log/nginx/bitone.in.error.log warn;

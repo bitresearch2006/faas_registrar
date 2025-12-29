@@ -1,4 +1,4 @@
-README — Tunnel Signer + Dynamic Reverse-Tunnel Router
+Tunnel Signer + Dynamic Reverse-Tunnel Router
 
 This system provides:
 
@@ -14,27 +14,24 @@ Automatic add/remove of user routes and per-user config files
 
 Full audit and revocation capability
 
-The system makes it possible for each WSL user to expose a local service (ex: chatbot at port 8080) via:
+Each user can expose a local service (for example, a chatbot at port 8080) as:
 
-https://bitone.in/<username>
+https://<username>.bitone.in
 
-
-The VM accepts reverse tunnels, signs short-lived certs, and routes each user's prefix to the correct backend port.
+The VM accepts reverse tunnels, signs short-lived certs, and routes each user’s subdomain to the correct backend port.
 
 🔥 System Architecture Overview
-8
 1. WSL Client
 
 Connects to the VM via SSH reverse tunneling:
 
 ssh -N -R 127.0.0.1:<assigned_port>:localhost:8080 user@bitone.in
 
-
 Before connecting, it requests a signed SSH certificate from the VM using its token.
 
 2. VM / Server Components
 
-SSH Certificate Authority installed under /etc/ssh/ca/
+SSH Certificate Authority under /etc/ssh/ca/
 
 sign_service.py (Flask API) signs SSH user certificates
 
@@ -44,26 +41,21 @@ Per-user nginx config generator creates one file per user under:
 
 /etc/nginx/conf.d/users/<username>.conf
 
+When routing is regenerated → Nginx reloads safely.
 
-When routing is regenerated → Nginx reloads safely
-
-3. Domain Routing
-https://bitone.in/alice  →  127.0.0.1:9001 → Alice’s WSL:8080
-https://bitone.in/bob    →  127.0.0.1:9002 → Bob’s WSL:8080
-
+3. Domain Routing (Subdomain Mode)
+https://alice.bitone.in  →  127.0.0.1:9001 → Alice’s WSL:8080
+https://bob.bitone.in    →  127.0.0.1:9002 → Bob’s WSL:8080
 📁 Directory Layout (VM)
 Path	Purpose
 /etc/tunnel/tunnel_tokens.json	Token store
 /etc/tunnel/user_ports.json	Username → port mapping
-/etc/nginx/conf.d/users/	Per-user nginx route files
+/etc/nginx/conf.d/users/	Per-user nginx vhost files
 /usr/local/sbin/	Admin scripts (add/revoke/remove/alloc)
-/usr/local/bin/	sign_service, regen scripts
+/usr/local/bin/	sign_service.py, regen_nginx_routes.sh
 /etc/systemd/system/sign_service.service	Systemd unit
 /etc/ssh/ca/	SSH Certificate Authority
 📜 Script Explanations
-
-Below is a complete explanation of each script installed by the system.
-
 1. vm_create_ca.sh
 
 Creates an SSH Certificate Authority.
@@ -78,9 +70,7 @@ Enables TCP forwarding (AllowTcpForwarding yes)
 
 Restarts sshd
 
-When you call it:
-
-Normally only once — automatically run during setup.
+Normally run once — automatically during setup.
 
 2. sign_service.py
 
@@ -97,12 +87,13 @@ Signs the key with CA
 Returns a .pub-cert file usable for SSH login
 
 Endpoint:
+
 POST /sign-cert
 
 Controlled by systemd:
+
 systemctl restart sign_service.service
 systemctl status sign_service.service
-
 3. add_token.sh
 
 Adds a new user token and auto-assigns a port.
@@ -117,9 +108,9 @@ Calls alloc_user_port.sh → assigns unique port (9001–9100)
 
 Calls regen_nginx_routes.sh → creates /etc/nginx/conf.d/users/<username>.conf
 
-Example usage:
-sudo add_token.sh "alice" "bitresearch" 3600
+Example:
 
+sudo add_token.sh "alice" "bitresearch" 3600
 
 Output includes:
 
@@ -134,28 +125,23 @@ Allocates a free port for a new user.
 Inputs:
 alloc_user_port.sh <username>
 
-Stores result in:
+Stores mapping in:
+
 /etc/tunnel/user_ports.json
-
-Returns:
-
-The assigned port (ex: 9003)
-
 5. regen_nginx_routes.sh
 
-Creates per-user nginx files from user_ports.json.
+Generates per-user nginx server blocks from user_ports.json.
 
-Generates:
+Creates files like:
+
 /etc/nginx/conf.d/users/alice.conf
-/etc/nginx/conf.d/users/bob.conf
-…
 
-Each file looks like:
-location ^~ /alice {
-    proxy_pass http://127.0.0.1:9001$request_uri;
-}
+Each file defines a server block mapping:
 
-Also does:
+server_name alice.bitone.in;
+→ proxy_pass http://127.0.0.1:<port>;
+
+Also:
 
 Removes stale users
 
@@ -163,14 +149,13 @@ Runs nginx -t
 
 Reloads nginx safely
 
-How to run manually:
-sudo regen_nginx_routes.sh
+Run manually:
 
+sudo regen_nginx_routes.sh
 6. remove_user_port.sh
 
-Removes a user’s assigned port and per-user nginx file.
+Removes a user’s assigned port and nginx config.
 
-Usage:
 sudo remove_user_port.sh alice
 
 It does:
@@ -185,44 +170,29 @@ Calls regen_nginx_routes.sh
 
 Deactivates a token and removes the user's routing.
 
-Workflow:
+sudo revoke_token.sh <token>
 
-Marks token as inactive (active=false)
+It:
 
-Extracts username from token store
+Sets active=false for the token
+
+Extracts the username
 
 Calls remove_user_port.sh <username>
 
-nginx config regenerates → route disappears
+Result: user route and port mapping are fully removed.
 
-Usage:
-sudo revoke_token.sh <token>
+⚙️ Setup Procedure
 
-8. tunnel_signer.conf
-
-Nginx snippet providing:
-
-/sign-cert → sign_service.py
-
-
-Placed at:
-
-/etc/nginx/conf.d/tunnel_signer.conf
-
-⚙️ Setup Procedure (Full System Installation)
-
-Upload all scripts to a folder on the VM
-
-Run:
+Upload all scripts to a folder on the VM and run:
 
 sudo bash setup_tunnel_signer.sh
-
 
 Installer performs:
 
 Sets up CA
 
-Installs sign_service + systemd
+Installs sign_service + systemd unit
 
 Creates token storage
 
@@ -235,7 +205,7 @@ Prepares nginx per-user directory
 Reloads nginx safely
 
 🚀 Operational Workflow
-Add a new WSL user
+➕ Add a new user
 sudo add_token.sh "alice" "bitresearch" 3600
 
 
@@ -253,7 +223,7 @@ User gets:
 
 Token
 
-Assigned port
+Assigned port (for example 9001)
 
 Instructions for reverse tunnel
 
@@ -263,112 +233,120 @@ WSL runs:
 
 ssh -N -R 127.0.0.1:<port>:localhost:8080 bitresearch@bitone.in
 
+Service becomes live at:
 
-Then their live service becomes available at:
-
-https://bitone.in/alice
-
-Revoke a user
+https://alice.bitone.in
+➖ Revoke a user
 sudo revoke_token.sh <token>
-
 
 Automatically:
 
 Disables token
 
-Removes per-user nginx file
-
 Removes port mapping
+
+Deletes per-user nginx config
 
 Regenerates nginx routing
 
-Route disappears immediately.
+🔍 Viewing Existing Tokens
 
-🧨 Impact on the System
+Token store file:
 
-This system modifies several core subsystems—here is everything it touches.
+/etc/tunnel/tunnel_tokens.json
+Show all tokens (pretty):
+jq . /etc/tunnel/tunnel_tokens.json
+List only token values:
+jq -r '.tokens | keys[]' /etc/tunnel/tunnel_tokens.json
+List active tokens with usernames:
+jq -r '.tokens | to_entries[] | select(.value.active==true) | "\(.key) -> \(.value.name)"' \
+  /etc/tunnel/tunnel_tokens.json
 
-1. SSHD (server)
+Use any token value with:
 
-Changes applied:
+sudo revoke_token.sh <token>
+🌐 Subdomain Routing Requirements (Recent Change)
 
-Enables SSH CA authentication
+The system now exposes users via subdomains instead of path prefixes.
 
-Allows TCP forwarding
+✅ DNS
 
-Trusted CA file added:
+Create a wildcard DNS record:
 
-/etc/ssh/trusted_user_ca_keys.pem
+*.bitone.in  →  <VM_PUBLIC_IP>
 
+(Cloudflare: A record, DNS only / grey cloud.)
 
-Impact:
+✅ TLS Certificate
 
-Does not affect normal SSH password or key logins
+Your TLS certificate must cover:
 
-Allows signed certs from WSL
+bitone.in
+*.bitone.in
 
-2. Nginx
+If needed, reissue with Certbot using a wildcard certificate.
 
-Modifications:
+✅ Nginx
 
-Adds snippet:
-
-/etc/nginx/conf.d/tunnel_signer.conf
-
-
-Creates dynamic per-user files under:
+Per-user vhosts are generated automatically under:
 
 /etc/nginx/conf.d/users/
 
+TLS and proxy settings are centralized via snippets:
 
-On user add/remove, nginx reloads automatically
+/etc/nginx/snippets/bitone_ssl.conf
+/etc/nginx/snippets/bitone_proxy.conf
 
-Impact:
+No manual nginx edits are required after setup.
 
-Only per-user routes are updated
+🗑️ Uninstall
 
-Does not modify other virtual hosts
+To completely remove the tunnel signer setup:
 
-Safe reload (tested via nginx -t)
+sudo /usr/local/sbin/uninstall_tunnel_signer.sh
 
-3. Systemd
+This will:
+- Stop and disable sign_service
+- Remove installed scripts and nginx configs
+- Remove token and port mappings
+- Optionally remove SSH CA
+- Remove nginx snippets
 
-Adds service:
+🧨 Impact on the System
 
-sign_service.service
+This system modifies:
 
+SSHD
 
-Impact:
+Enables CA authentication
 
-Runs a lightweight Flask app
+Allows TCP forwarding
 
-Auto-starts on boot
+Nginx
 
-4. /etc/tunnel directory
+Uses dynamic per-user server blocks
 
-Stores:
+Reloads safely on changes
 
-Token store
+Systemd
 
-User-to-port mapping
+Runs sign_service.service on boot
 
-Impact:
+/etc/tunnel
 
-Only these scripts modify this
-
-Root access only
+Stores tokens and port mappings
 
 ⚠️ Safety Considerations
 
-All edits are atomic (write to .tmp, then rename).
+All edits are atomic (write to .tmp, then rename)
 
-Nginx reload only occurs if configuration test passes.
+Nginx reload only occurs if nginx -t passes
 
-Ports are bound only to 127.0.0.1 → not accessible externally.
+Ports are bound only to 127.0.0.1
 
-SSH CA key is stored at /etc/ssh/ca/ssh_ca (permissions locked).
+SSH CA key permissions are locked down
 
-revocation cleans up routing to avoid ghost routes.
+Revocation cleans up routing immediately
 
 🎯 Conclusion
 
@@ -378,8 +356,8 @@ Secure WSL → Cloud VM routing
 
 Automatic port allocation
 
-Per-user SSL-protected URLs
+Per-user SSL-protected subdomains
 
 Strong token-based authentication
 
-Clean add/remove with per-user config files
+Clean add/remove with per-user isolation
