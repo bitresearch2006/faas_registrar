@@ -103,6 +103,14 @@ EOF
 
 chmod 644 "$SSL_SNIPPET" "$PROXY_SNIPPET"
 
+# create venv if missing
+if [ ! -x "$PY_BIN" ]; then
+  echo "--> Creating python virtualenv at $VENV_DIR"
+  mkdir -p "$(dirname "$VENV_DIR")"
+  python3 -m venv "$VENV_DIR"
+  chown -R root:root "$VENV_DIR"
+  chmod -R 750 "$VENV_DIR"
+fi
 
 # ensure python venv support exists
 if ! python3 -c "import ensurepip" >/dev/null 2>&1 && ! python3 -c "import venv" >/dev/null 2>&1; then
@@ -115,15 +123,6 @@ if ! python3 -c "import ensurepip" >/dev/null 2>&1 && ! python3 -c "import venv"
     echo "apt not found — cannot auto-install python3-venv. Please install python3-venv package manually."
     exit 1
   fi
-fi
-
-# create venv if missing
-if [ ! -x "$PY_BIN" ]; then
-  echo "--> Creating python virtualenv at $VENV_DIR"
-  mkdir -p "$(dirname "$VENV_DIR")"
-  python3 -m venv "$VENV_DIR"
-  chown -R root:root "$VENV_DIR"
-  chmod -R 750 "$VENV_DIR"
 fi
 
 # upgrade pip inside venv and install runtime deps
