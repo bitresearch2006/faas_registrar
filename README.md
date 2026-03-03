@@ -168,6 +168,29 @@ Installer performs:
 
 ---
 
+## Configure Nginx to Load Dynamic User Routes
+
+```bash
+sudo nano /etc/nginx/nginx.conf
+```
+
+Ensure the following lines exist inside the http {} block:
+
+```Ngnix
+include /etc/nginx/conf.d/*.conf;
+include /etc/nginx/conf.d/users/*.conf;
+include /etc/nginx/sites-enabled/*;
+```
+
+Then reload Nginx:
+
+```bash
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+---
+
 ## Operational Workflow
 
 ### Add User
