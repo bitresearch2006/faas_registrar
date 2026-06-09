@@ -11,6 +11,9 @@ set -euo pipefail
 MAPPING="/etc/tunnel/user_ports.json"
 OUT_DIR="/etc/nginx/conf.d/users"
 LOCK="/var/lock/regen_nginx_routes.lock"
+SUBDOMAINS_FILE="/etc/tunnel/subdomains.txt"
+EMAIL="bitresearch2006@gmail.com"
+CERT_NAME="bitone.in"
 NGINX_BIN="$(command -v nginx || true)"
 
 if [ -z "$NGINX_BIN" ]; then
@@ -119,10 +122,43 @@ if [ -s "$TMP_DIR/to_delete.list" ]; then
   done < "$TMP_DIR/to_delete.list"
 fi
 
+# -----------------------------------------------------------------------------
+# Update subdomains.txt (for certificate issuance)
+# -----------------------------------------------------------------------------
+python3 - "$MAPPING" "$SUBDOMAINS_FILE" <<'PY'
+import json,sys,re
+mapping_file=sys.argv[1]
+outfile=sys.argv[2]
+data=json.load(open(mapping_file))
+users=data.get("users",{})
+def safe_name(u):
+    return re.sub(r'[^A-Za-z0-9_\-]', '_', u)
+names = [f"{safe_name(u)}.bitone.in" for u in users.keys()]
+names.insert(0,"bitone.in")  # always include root domain
+names.insert(1,"www.bitone.in")	# always include root domain
+with open(outfile,"w") as fh:
+    for n in sorted(set(names)):
+        fh.write(n+"\n")
+PY
+
 # Test nginx config before reload
 if "$NGINX_BIN" -t >/dev/null 2>&1; then
   systemctl reload nginx
   echo "regen_nginx_routes: nginx reloaded successfully"
+
+  # -----------------------------------------------------------------------------
+  # Re-issue certificate with all subdomains
+  # -----------------------------------------------------------------------------
+  # Only re-issue if subdomains.txt changed
+  touch "$SUBDOMAINS_FILE.prev"
+  if ! cmp -s "$SUBDOMAINS_FILE" "$SUBDOMAINS_FILE.prev"; then
+    cp "$SUBDOMAINS_FILE" "$SUBDOMAINS_FILE.prev"
+    certbot --nginx \
+      $(awk '{print "-d",$0}' "$SUBDOMAINS_FILE") \
+      --cert-name "$CERT_NAME" \
+      --non-interactive --agree-tos -m "$EMAIL" --force-renewal || true
+fi
+
   exit 0
 else
   echo "ERROR: nginx config test failed; not reloading. See nginx -t output below." >&2
