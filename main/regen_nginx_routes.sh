@@ -190,7 +190,7 @@ if "$NGINX_BIN" -t >/dev/null 2>&1; then
       --non-interactive --agree-tos -m "$EMAIL" \
       --force-renewal \
       --installer none
-fi
+  fi
 
   exit 0
 else
