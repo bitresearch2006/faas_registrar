@@ -153,10 +153,43 @@ if "$NGINX_BIN" -t >/dev/null 2>&1; then
   touch "$SUBDOMAINS_FILE.prev"
   if ! cmp -s "$SUBDOMAINS_FILE" "$SUBDOMAINS_FILE.prev"; then
     cp "$SUBDOMAINS_FILE" "$SUBDOMAINS_FILE.prev"
-    certbot --nginx \
+    #
+    # === Why we use `certbot certonly --installer none` ===
+    #
+    # Our system uses ONE unified certificate (bitone.in) for ALL subdomains.
+    # Every subdomain server block includes the same SSL snippet:
+    #
+    #     include /etc/nginx/snippets/bitone_ssl.conf;
+    #
+    # That snippet always points to:
+    #     /etc/letsencrypt/live/bitone.in/fullchain.pem
+    #     /etc/letsencrypt/live/bitone.in/privkey.pem
+    #
+    # So Nginx already knows which certificate to use for every subdomain.
+    #
+    # Certbot normally tries to "install" the certificate into matching
+    # server blocks, but it only scans /etc/nginx/sites-enabled/.
+    # Our dynamic subdomain configs live in /etc/nginx/conf.d/users/,
+    # so Certbot cannot find them and prints this harmless message:
+    #
+    #     "Could not automatically find a matching server block for X"
+    #
+    # This message does NOT affect our system because Nginx loads the
+    # certificate through the shared SSL snippet, not through Certbot.
+    #
+    # To avoid the confusing warning, we disable the installer:
+    #     --installer none
+    #
+    # Certbot still issues/renews the certificate correctly, and Nginx
+    # continues to use it via the shared snippet.
+    #
+    # Issue/renew the unified certificate WITHOUT trying to install it into Nginx
+    certbot certonly --nginx \
       $(awk '{print "-d",$0}' "$SUBDOMAINS_FILE") \
       --cert-name "$CERT_NAME" \
-      --non-interactive --agree-tos -m "$EMAIL" --force-renewal || true
+      --non-interactive --agree-tos -m "$EMAIL" \
+      --force-renewal \
+      --installer none
 fi
 
   exit 0
