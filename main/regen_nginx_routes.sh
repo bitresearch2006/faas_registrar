@@ -9,7 +9,7 @@ set -euo pipefail
 # Exits non-zero if nginx -t fails (no reload will be performed).
 
 MAPPING="/etc/tunnel/user_ports.json"
-OUT_DIR="/etc/nginx/conf.d/users"
+OUT_DIR="/etc/nginx/conf.d"
 LOCK="/var/lock/regen_nginx_routes.lock"
 SUBDOMAINS_FILE="/etc/tunnel/subdomains.txt"
 EMAIL="bitresearch2006@gmail.com"
