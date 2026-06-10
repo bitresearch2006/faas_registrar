@@ -36,7 +36,7 @@ ALLOC_PORT_DST="/usr/local/sbin/alloc_user_port.sh"
 REGEN_NGINX_DST="/usr/local/bin/regen_nginx_routes.sh"
 REMOVE_PORT_DST="/usr/local/sbin/remove_user_port.sh"
 UNINSTALL_DST="/usr/local/sbin/uninstall_tunnel_signer.sh"
-NGINX_USERS_DIR="/etc/nginx/conf.d/users"
+NGINX_USERS_DIR="/etc/nginx/conf.d"
 
 # centeralized TLS
 SSL_SNIPPET="/etc/nginx/snippets/bitone_ssl.conf"
